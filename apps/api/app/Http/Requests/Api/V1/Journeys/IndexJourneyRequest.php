@@ -1,0 +1,30 @@
+<?php
+
+namespace App\Http\Requests\Api\V1\Journeys;
+
+use App\Models\Journey;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+
+class IndexJourneyRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('viewAny', Journey::class) ?? false;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'per_page' => ['sometimes', 'integer', 'between:1,100'],
+        ];
+    }
+}

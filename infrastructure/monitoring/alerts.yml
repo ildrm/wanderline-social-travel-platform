@@ -1,0 +1,21 @@
+groups:
+  - name: telemetry-pipeline
+    rules:
+      - alert: OpenTelemetryCollectorUnreachable
+        expr: up{job="otel-collector-internal"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: OpenTelemetry collector cannot be scraped
+          description: The local telemetry ingestion and export path has been unavailable for more than two minutes.
+
+      - alert: OpenTelemetryCollectorRefusingData
+        expr: rate(otelcol_receiver_refused_spans[5m]) + rate(otelcol_receiver_refused_metric_points[5m]) + rate(otelcol_receiver_refused_log_records[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenTelemetry collector is refusing telemetry
+          description: One or more telemetry pipelines have refused data continuously for five minutes.
+

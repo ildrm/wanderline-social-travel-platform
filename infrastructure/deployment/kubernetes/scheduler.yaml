@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tour-scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tour-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tour-scheduler
+    spec:
+      terminationGracePeriodSeconds: 30
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scheduler
+          image: ghcr.io/tour-platform/api:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["php", "artisan", "schedule:work"]
+          envFrom:
+            - configMapRef:
+                name: tour-platform-config
+            - secretRef:
+                name: tour-platform-runtime
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: tour-scheduler
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: runtime
+              mountPath: /workspace/apps/api/storage
+            - name: cache
+              mountPath: /workspace/apps/api/bootstrap/cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tour-platform-config
+data:
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_URL: https://api.tour-platform.example
+  FRONTEND_URL: https://tour-platform.example
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: notice
+  DB_CONNECTION: pgsql
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  FILESYSTEM_DISK: s3
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_USE_PATH_STYLE_ENDPOINT: "false"
+  MAIL_MAILER: smtp
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
+

@@ -1,0 +1,305 @@
+name: ${COMPOSE_PROJECT_NAME:-tour-platform}
+
+x-api-environment: &api-environment
+  APP_ENV: ${APP_ENV:-local}
+  APP_DEBUG: ${APP_DEBUG:-true}
+  APP_KEY: ${APP_KEY:?Run make bootstrap to generate a local APP_KEY}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  FRONTEND_URL: ${WEB_URL:-http://localhost:3000}
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: debug
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: ${POSTGRES_DB:-tour_platform}
+  DB_USERNAME: ${POSTGRES_USER:-tour_platform}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_DB: ${REDIS_QUEUE_DB:-2}
+  REDIS_CACHE_DB: ${REDIS_CACHE_DB:-1}
+  REDIS_QUEUE_DB: ${REDIS_QUEUE_DB:-2}
+  REDIS_QUEUE_CONNECTION: default
+  REDIS_CACHE_LOCK_CONNECTION: cache
+  SESSION_CONNECTION: cache
+  REDIS_RATE_LIMIT_DB: ${REDIS_RATE_LIMIT_DB:-3}
+  REDIS_PRESENCE_DB: ${REDIS_PRESENCE_DB:-4}
+  REDIS_REALTIME_DB: ${REDIS_REALTIME_DB:-5}
+  FILESYSTEM_DISK: s3
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-tour_local}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-local-development-only}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: ${MINIO_BUCKET:-tour-platform-private}
+  AWS_ENDPOINT: http://minio:9000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: 1025
+  MAIL_ENCRYPTION: ""
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_SERVICE_NAME: tour-api
+
+x-api-base: &api-base
+  build:
+    context: .
+    dockerfile: infrastructure/docker/api/Dockerfile
+    target: development
+  init: true
+  working_dir: /workspace/apps/api
+  environment: *api-environment
+  volumes:
+    - ./apps/api:/workspace/apps/api
+    - api_vendor_api:/workspace/apps/api/vendor
+    - ./infrastructure/docker/healthchecks:/healthchecks:ro
+  networks:
+    - app
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+    mailpit:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgis/postgis:18-3.6
+    # The upstream PostGIS 18 image is currently amd64-only; Docker Desktop
+    # transparently emulates it on arm64 development hosts.
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tour_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-tour_platform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    healthcheck:
+      test: ["CMD", "/healthchecks/postgres.sh"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - app
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./infrastructure/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    healthcheck:
+      test: ["CMD", "/healthchecks/redis.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - app
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-tour_local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-development-only}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    healthcheck:
+      test: ["CMD", "/healthchecks/minio.sh"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - app
+    restart: unless-stopped
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-tour_local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-development-only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-tour-platform-private}
+    entrypoint: ["/bin/sh", "/minio/create-private-bucket.sh"]
+    volumes:
+      - ./infrastructure/docker/minio:/minio:ro
+    networks:
+      - app
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 5000
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    volumes:
+      - mailpit_data:/data
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    healthcheck:
+      test: ["CMD", "/healthchecks/mailpit.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - app
+    restart: unless-stopped
+
+  api:
+    <<: *api-base
+    # Laravel's reload wrapper strips all non-whitelisted process variables
+    # when apps/api/.env exists. --no-reload preserves Compose service hosts.
+    command: ["php", "artisan", "serve", "--no-reload", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/healthchecks/api.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  worker:
+    <<: *api-base
+    command: ["php", "artisan", "queue:work", "--sleep=1", "--tries=3", "--max-time=3600"]
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - api_vendor_worker:/workspace/apps/api/vendor
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    stop_grace_period: 30s
+
+  scheduler:
+    <<: *api-base
+    command: ["php", "artisan", "schedule:work"]
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - api_vendor_scheduler:/workspace/apps/api/vendor
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web/Dockerfile
+      target: development
+    init: true
+    working_dir: /workspace
+    command: ["npm", "run", "dev", "--workspace=apps/web", "--", "--hostname", "0.0.0.0"]
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      INTERNAL_API_URL: http://api:8080
+      NEXT_PUBLIC_API_URL: ${APP_URL:-http://localhost:8080}
+      NEXT_PUBLIC_APP_URL: ${WEB_URL:-http://localhost:3000}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: tour-web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./:/workspace
+      - web_node_modules:/workspace/node_modules
+      - web_workspace_node_modules:/workspace/apps/web/node_modules
+      - web_next:/workspace/apps/web/.next
+      - ./infrastructure/docker/healthchecks:/healthchecks:ro
+    healthcheck:
+      test: ["CMD", "/healthchecks/web.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.137.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./infrastructure/monitoring/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - app
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - otel-collector
+    networks:
+      - app
+    profiles: ["observability"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app
+    profiles: ["observability"]
+    restart: unless-stopped
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  mailpit_data:
+  api_vendor_api:
+  api_vendor_worker:
+  api_vendor_scheduler:
+  web_node_modules:
+  web_workspace_node_modules:
+  web_next:
+  prometheus_data:
+  grafana_data:

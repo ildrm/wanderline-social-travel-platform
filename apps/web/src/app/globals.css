@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #fff;
+  --ink: #0c2340;
+  --ink-soft: #53647a;
+  --line: #d7e0e8;
+  --coral: #f06452;
+  --coral-dark: #d84b3b;
+  --sea: #dfeee9;
+  --focus: #2167a7;
+  --font-body-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display-family: Georgia, "Times New Roman", serif;
+}
+
+@theme inline {
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body-family);
+  --font-display: var(--font-display-family);
+}
+
+* { box-sizing: border-box; }
+html { background: var(--canvas); color: var(--ink); }
+body { min-height: 100vh; margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font-body-family); }
+button, input, select { font: inherit; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 70%, white); outline-offset: 3px; }
+::selection { background: color-mix(in srgb, var(--coral) 24%, white); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

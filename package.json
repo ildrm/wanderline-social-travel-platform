@@ -1,0 +1,21 @@
+{
+  "name": "wanderline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Global travel coordination and experience platform",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=web",
+    "build:web": "npm run build --workspace=web",
+    "lint:web": "npm run lint --workspace=web",
+    "test:web": "npm run test --workspace=web",
+    "typecheck:web": "npm run typecheck --workspace=web"
+  },
+  "engines": {
+    "node": ">=24 <27",
+    "npm": ">=11"
+  },
+  "packageManager": "npm@11.17.0"
+}

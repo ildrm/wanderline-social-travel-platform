@@ -1,0 +1,15 @@
+.git
+node_modules
+**/node_modules
+apps/api/vendor
+apps/api/storage/logs
+apps/api/storage/framework/cache
+apps/api/storage/framework/sessions
+apps/api/storage/framework/views
+apps/web/.next
+docs/design/*.png
+.env
+.env.*
+!.env.example
+coverage
+**/coverage

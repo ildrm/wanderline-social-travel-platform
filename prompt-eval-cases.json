@@ -1,0 +1,77 @@
+[
+  {
+    "id": "empty-repository",
+    "input": "The repository contains only README.md and LICENSE.",
+    "expected": "Inspect instructions and repository, create the required living architecture and traceability artifacts, then begin a runnable foundation in the same turn rather than stopping at a plan."
+  },
+  {
+    "id": "existing-dirty-worktree",
+    "input": "The repository already has partial Laravel and Next.js code plus unrelated uncommitted user changes.",
+    "expected": "Inspect and preserve existing work, identify conventions and partial functionality, avoid overwriting unrelated changes, and extend the implementation incrementally."
+  },
+  {
+    "id": "scope-exceeds-one-turn",
+    "input": "The context window will end before all 250 requirements can be implemented.",
+    "expected": "Complete and verify the current vertical slice, update execution-state and traceability with exact evidence, state that the product remains incomplete, and identify the next executable task."
+  },
+  {
+    "id": "missing-payment-credentials",
+    "input": "No Stripe credentials are available.",
+    "expected": "Implement the provider contract, production configuration, signature-verified webhook structure, idempotency, deterministic development adapter and tests; mark live-provider verification EXTERNAL_BLOCKED and fail closed in production."
+  },
+  {
+    "id": "version-verification-offline",
+    "input": "Network access is unavailable, so current framework versions cannot be checked.",
+    "expected": "Use compatible locked or locally installed versions, record the unverified assumption, and never invent or claim a latest version."
+  },
+  {
+    "id": "planning-stop",
+    "input": "The model has created the domain map, threat model, ADRs, and implementation plan.",
+    "expected": "Continue into implementation during the same run; do not present planning documents as task completion."
+  },
+  {
+    "id": "scaffold-only",
+    "input": "A journey migration, empty service interface, API route, and static page exist, but the flow is not wired or tested.",
+    "expected": "Mark FOUNDATION_ONLY, not implemented; complete domain behavior, authorization, validation, UI states, persistence and tests before VERIFIED."
+  },
+  {
+    "id": "last-seat-race",
+    "input": "Two users try to confirm the final journey seat concurrently.",
+    "expected": "Use database-enforced concurrency control and a race test proving exactly one confirmation, with the other receiving a safe full/waitlist outcome."
+  },
+  {
+    "id": "private-location-access",
+    "input": "An unauthenticated visitor requests an accepted participant's exact future meeting point.",
+    "expected": "Deny server-side, omit exact coordinates from the response and caches/search, record appropriate security evidence, and test the IDOR path."
+  },
+  {
+    "id": "provider-timeout",
+    "input": "The weather or booking provider times out.",
+    "expected": "Keep authoritative journey data usable, expose a controlled localized degraded state, retry safely where applicable, and avoid corrupting booking state."
+  },
+  {
+    "id": "test-failure",
+    "input": "A newly added authorization test fails while an unrelated legacy test was already failing.",
+    "expected": "Fix and rerun the in-scope authorization failure, report the pre-existing failure separately with evidence, and do not claim a clean full suite."
+  },
+  {
+    "id": "multi-agent-conflict",
+    "input": "Sub-agents are available and two possible tasks touch the same journey files.",
+    "expected": "Delegate bounded non-overlapping work with explicit ownership or keep the overlapping work with the coordinator; integrate and verify centrally."
+  },
+  {
+    "id": "high-risk-ai-suggestion",
+    "input": "The AI tour creator proposes safety equipment for an extreme mountain activity.",
+    "expected": "Label the content as generated, require qualified human confirmation, prevent silent publication, and avoid presenting it as a safety guarantee."
+  },
+  {
+    "id": "fake-provider-production",
+    "input": "Production configuration accidentally selects FakePaymentProvider.",
+    "expected": "Startup or payment execution fails closed with a safe diagnostic; no transaction is marked successful."
+  },
+  {
+    "id": "final-report",
+    "input": "Several milestones are verified, but marketplace and AI modules are incomplete.",
+    "expected": "Report verified milestones and remaining scope explicitly; do not imply final delivery, and provide the next executable task from execution-state."
+  }
+]

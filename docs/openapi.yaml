@@ -1,0 +1,1206 @@
+openapi: 3.1.0
+info:
+  title: Wanderline API
+  version: 0.1.0
+  description: >-
+    Contract for the currently implemented platform slice. Browser clients first
+    initialize Sanctum CSRF cookies, then authenticate with an HttpOnly session.
+    Every /api response includes X-Correlation-ID. No unimplemented product
+    endpoint is described here.
+servers:
+  - url: http://localhost:8080
+    description: Local Docker API
+tags:
+  - name: Operations
+  - name: Authentication
+  - name: Journeys
+
+paths:
+  /sanctum/csrf-cookie:
+    get:
+      tags: [Authentication]
+      operationId: initializeCsrfCookie
+      summary: Initialize the first-party browser CSRF cookie
+      description: >-
+        Returns the XSRF-TOKEN cookie used as the X-XSRF-TOKEN header on
+        state-changing requests. The session cookie name is configuration-driven;
+        the checked-in default is laravel-session.
+      security: []
+      responses:
+        "204":
+          description: CSRF cookie initialized; response has no body.
+          headers:
+            Set-Cookie:
+              description: One or more browser cookies, including XSRF-TOKEN.
+              schema:
+                type: string
+
+  /api/v1/health:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Operations]
+      operationId: getHealth
+      summary: Process liveness
+      security: []
+      responses:
+        "200":
+          description: API process is healthy.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthEnvelope"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/readiness:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Operations]
+      operationId: getReadiness
+      summary: Required dependency readiness
+      security: []
+      responses:
+        "200":
+          description: Database, configured queue Redis, and private object storage are available.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyEnvelope"
+        "503":
+          description: One or more required dependencies are unavailable; only safe component states are exposed.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/auth/register:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Authentication]
+      operationId: registerUser
+      summary: Register and begin a browser session
+      description: >-
+        Email is trimmed and lowercased. A stateful browser obtains CSRF cookies
+        first; successful registration rotates and authenticates the session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created and session authenticated.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserEnvelope"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/auth/login:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Authentication]
+      operationId: loginUser
+      summary: Authenticate a browser session
+      description: >-
+        Email is trimmed and lowercased. A stateful browser obtains CSRF cookies
+        first; successful login rotates the session identifier.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session authenticated.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserEnvelope"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/auth/user:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: Get the authenticated user
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Safe current-user fields.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/auth/logout:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Authentication]
+      operationId: logoutUser
+      summary: End the authenticated browser session
+      security:
+        - sessionCookie: []
+          xsrfHeader: []
+      responses:
+        "204":
+          description: Session invalidated and CSRF token regenerated; no body.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "429":
+          $ref: "#/components/responses/RateLimitProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/journeys:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Journeys]
+      operationId: listOwnedJourneys
+      summary: List the authenticated owner's journeys
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Owner-scoped paginated journeys.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyCollectionEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+    post:
+      tags: [Journeys]
+      operationId: createJourney
+      summary: Create an owner-scoped draft journey
+      description: Server assigns owner and DRAFT status; supplied id, owner_id, or status is rejected.
+      security:
+        - sessionCookie: []
+          xsrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJourneyRequest"
+      responses:
+        "201":
+          description: Draft journey created.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/journeys/{journey}:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/JourneyId"
+    get:
+      tags: [Journeys]
+      operationId: getOwnedJourney
+      summary: Get an owned journey with transition history
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Journey and newest-first transition history.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/journeys/{journey}/itinerary:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/JourneyId"
+    get:
+      tags: [Journeys]
+      operationId: getJourneyItinerary
+      summary: Get an owned journey itinerary
+      description: Returns approximate coordinates only; restricted exact coordinates are absent from the response.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Ordered day, stop, activity and transportation-leg graph.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyItineraryEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+    post:
+      tags: [Journeys]
+      operationId: createJourneyItinerary
+      summary: Transactionally create a draft journey itinerary
+      description: >-
+        Allowed only for the owner of a DRAFT journey with no existing itinerary.
+        Days must be strictly increasing; each consecutive stop is connected by
+        exactly one chronological leg. Exact input coordinates are stored but are
+        replaced with city-precision coordinates in the response.
+      security:
+        - sessionCookie: []
+          xsrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJourneyItineraryRequest"
+      responses:
+        "201":
+          description: Complete draft itinerary graph created.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyItineraryEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        "409":
+          $ref: "#/components/responses/ItineraryConflictProblem"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+  /api/v1/journeys/{journey}/transitions:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/JourneyId"
+    post:
+      tags: [Journeys]
+      operationId: transitionJourney
+      summary: Apply an authorized lifecycle transition
+      description: >-
+        The owner-only service row-locks the journey, validates the state-machine
+        edge, persists history, and dispatches an after-commit domain event.
+      security:
+        - sessionCookie: []
+          xsrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitionJourneyRequest"
+      responses:
+        "200":
+          description: Journey transitioned and history returned newest first.
+          headers:
+            X-Correlation-ID:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JourneyEnvelope"
+        "401":
+          $ref: "#/components/responses/UnauthenticatedProblem"
+        "403":
+          $ref: "#/components/responses/ForbiddenProblem"
+        "404":
+          $ref: "#/components/responses/NotFoundProblem"
+        "409":
+          $ref: "#/components/responses/TransitionConflictProblem"
+        "419":
+          $ref: "#/components/responses/CsrfProblem"
+        "422":
+          $ref: "#/components/responses/ValidationProblem"
+        default:
+          $ref: "#/components/responses/ServerProblem"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: laravel-session
+      description: >-
+        First-party HttpOnly session cookie. Its name is configurable through
+        SESSION_COOKIE; laravel-session is the checked-in default.
+    xsrfHeader:
+      type: apiKey
+      in: header
+      name: X-XSRF-TOKEN
+      description: Decoded XSRF-TOKEN cookie value for state-changing browser requests.
+
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: >-
+        Client correlation identifier. Invalid values are replaced. Accepted values
+        start alphanumeric and contain up to 128 letters, digits, dots, underscores,
+        or hyphens.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    JourneyId:
+      name: journey
+      in: path
+      required: true
+      description: Journey ULID.
+      schema:
+        $ref: "#/components/schemas/Ulid"
+
+  headers:
+    CorrelationId:
+      description: Correlation identifier accepted or generated by the API.
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+  schemas:
+    Ulid:
+      type: string
+      pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
+      examples: [01K59R70R7Q3Q61P3H4A4GN2PR]
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+
+    UserEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/User"
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password, password_confirmation]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 72
+          description: Requires letters, mixed case, numbers, and symbols.
+        password_confirmation:
+          type: string
+          format: password
+          minLength: 12
+          maxLength: 72
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          maxLength: 72
+
+    JourneyMode:
+      type: string
+      enum: [SOCIAL, EXPERIENCE, PROFESSIONAL, PRIVATE_GROUP]
+
+    JourneyVisibility:
+      type: string
+      enum: [PRIVATE, UNLISTED, PUBLIC]
+
+    JourneyStatus:
+      type: string
+      enum:
+        - DRAFT
+        - PRIVATE_PREVIEW
+        - PENDING_REVIEW
+        - RECRUITING
+        - MINIMUM_REACHED
+        - CONFIRMED
+        - FULL
+        - WAITLIST_ONLY
+        - PREPARING
+        - ACTIVE
+        - PAUSED
+        - EMERGENCY
+        - COMPLETED
+        - CANCELLED
+        - ARCHIVED
+
+    CreateJourneyRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, title, capacity, visibility, timezone]
+      properties:
+        mode:
+          $ref: "#/components/schemas/JourneyMode"
+        title:
+          type: string
+          minLength: 3
+          maxLength: 160
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        visibility:
+          $ref: "#/components/schemas/JourneyVisibility"
+        timezone:
+          type: string
+          maxLength: 64
+          description: IANA timezone identifier validated by the backend.
+
+    TransitionJourneyRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/JourneyStatus"
+        note:
+          type: [string, "null"]
+          maxLength: 1000
+
+    TransportationMode:
+      type: string
+      enum: [AIR, RAIL, ROAD, SEA, WALK]
+
+    ExactCoordinatesInput:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude]
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    LocationInput:
+      type: object
+      additionalProperties: false
+      required: [name, country_code, timezone, exact_coordinates]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        country_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        timezone:
+          type: string
+          description: IANA timezone identifier.
+        exact_coordinates:
+          $ref: "#/components/schemas/ExactCoordinatesInput"
+
+    ActivityInput:
+      type: object
+      additionalProperties: false
+      required: [title, starts_at, ends_at]
+      properties:
+        title:
+          type: string
+          maxLength: 160
+        description:
+          type: [string, "null"]
+          maxLength: 5000
+        starts_at:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp with an explicit numeric offset.
+        ends_at:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp with an explicit numeric offset and later than starts_at.
+
+    StopInput:
+      type: object
+      additionalProperties: false
+      required: [key, location]
+      properties:
+        key:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z0-9][a-z0-9_-]*$"
+        label:
+          type: [string, "null"]
+          maxLength: 120
+        arrival_at:
+          type: [string, "null"]
+          format: date-time
+        departure_at:
+          type: [string, "null"]
+          format: date-time
+        location:
+          $ref: "#/components/schemas/LocationInput"
+        activities:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ActivityInput"
+
+    JourneyDayInput:
+      type: object
+      additionalProperties: false
+      required: [date, timezone, stops]
+      properties:
+        date:
+          type: string
+          format: date
+        timezone:
+          type: string
+          description: IANA timezone identifier.
+        stops:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/StopInput"
+
+    TransportationLegInput:
+      type: object
+      additionalProperties: false
+      required: [origin_stop_key, destination_stop_key, mode, departure_at, arrival_at]
+      properties:
+        origin_stop_key:
+          type: string
+          maxLength: 64
+        destination_stop_key:
+          type: string
+          maxLength: 64
+        mode:
+          $ref: "#/components/schemas/TransportationMode"
+        provider:
+          type: [string, "null"]
+          maxLength: 120
+        departure_at:
+          type: string
+          format: date-time
+        arrival_at:
+          type: string
+          format: date-time
+
+    CreateJourneyItineraryRequest:
+      type: object
+      additionalProperties: false
+      required: [days, transportation_legs]
+      properties:
+        days:
+          type: array
+          minItems: 1
+          maxItems: 90
+          description: Dates and stop keys must be distinct; dates must be strictly increasing.
+          items:
+            $ref: "#/components/schemas/JourneyDayInput"
+        transportation_legs:
+          type: array
+          maxItems: 4499
+          description: Exactly one leg must connect each pair of consecutive stops in order.
+          items:
+            $ref: "#/components/schemas/TransportationLegInput"
+
+    ApproximateCoordinates:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude, precision]
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        precision:
+          const: CITY
+
+    ItineraryLocation:
+      type: object
+      additionalProperties: false
+      required: [id, name, country_code, timezone, approximate_coordinates]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          type: string
+        country_code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        timezone:
+          type: string
+        approximate_coordinates:
+          $ref: "#/components/schemas/ApproximateCoordinates"
+
+    ItineraryActivity:
+      type: object
+      additionalProperties: false
+      required: [id, position, title, description, starts_at, ends_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        position:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+
+    ItineraryStop:
+      type: object
+      additionalProperties: false
+      required: [id, position, label, arrival_at, departure_at, location, activities]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        position:
+          type: integer
+          minimum: 1
+        label:
+          type: [string, "null"]
+        arrival_at:
+          type: [string, "null"]
+          format: date-time
+        departure_at:
+          type: [string, "null"]
+          format: date-time
+        location:
+          $ref: "#/components/schemas/ItineraryLocation"
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryActivity"
+
+    ItineraryDay:
+      type: object
+      additionalProperties: false
+      required: [id, position, date, timezone, stops]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        position:
+          type: integer
+          minimum: 1
+        date:
+          type: string
+          format: date
+        timezone:
+          type: string
+        stops:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryStop"
+
+    ItineraryTransportationLeg:
+      type: object
+      additionalProperties: false
+      required: [id, position, origin_stop_id, destination_stop_id, mode, provider, departure_at, arrival_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        position:
+          type: integer
+          minimum: 1
+        origin_stop_id:
+          $ref: "#/components/schemas/Ulid"
+        destination_stop_id:
+          $ref: "#/components/schemas/Ulid"
+        mode:
+          $ref: "#/components/schemas/TransportationMode"
+        provider:
+          type: [string, "null"]
+        departure_at:
+          type: string
+          format: date-time
+        arrival_at:
+          type: string
+          format: date-time
+
+    JourneyItinerary:
+      type: object
+      additionalProperties: false
+      required: [journey_id, title, status, timezone, days, transportation_legs]
+      properties:
+        journey_id:
+          $ref: "#/components/schemas/Ulid"
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/JourneyStatus"
+        timezone:
+          type: string
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryDay"
+        transportation_legs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryTransportationLeg"
+
+    JourneyItineraryEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/JourneyItinerary"
+
+    JourneyTransition:
+      type: object
+      additionalProperties: false
+      required: [id, from_status, to_status, actor_id, note, transitioned_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        from_status:
+          $ref: "#/components/schemas/JourneyStatus"
+        to_status:
+          $ref: "#/components/schemas/JourneyStatus"
+        actor_id:
+          type: integer
+          format: int64
+          minimum: 1
+        note:
+          type: [string, "null"]
+        transitioned_at:
+          type: string
+          format: date-time
+
+    Journey:
+      type: object
+      additionalProperties: false
+      required: [id, owner_id, mode, title, status, capacity, visibility, timezone, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        owner_id:
+          type: integer
+          format: int64
+          minimum: 1
+        mode:
+          $ref: "#/components/schemas/JourneyMode"
+        title:
+          type: string
+          maxLength: 160
+        status:
+          $ref: "#/components/schemas/JourneyStatus"
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        visibility:
+          $ref: "#/components/schemas/JourneyVisibility"
+        timezone:
+          type: string
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        transition_history:
+          type: array
+          description: Present when the relationship is loaded; newest first.
+          items:
+            $ref: "#/components/schemas/JourneyTransition"
+
+    JourneyEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Journey"
+
+    PaginationLink:
+      type: object
+      additionalProperties: false
+      required: [url, label, active]
+      properties:
+        url:
+          type: [string, "null"]
+        label:
+          type: string
+        active:
+          type: boolean
+
+    PaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [current_page, from, last_page, links, path, per_page, to, total]
+      properties:
+        current_page: { type: integer, minimum: 1 }
+        from: { type: [integer, "null"], minimum: 1 }
+        last_page: { type: integer, minimum: 1 }
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaginationLink"
+        path: { type: string }
+        per_page: { type: integer, minimum: 1, maximum: 100 }
+        to: { type: [integer, "null"], minimum: 1 }
+        total: { type: integer, minimum: 0 }
+
+    PaginatorLinks:
+      type: object
+      additionalProperties: false
+      required: [first, last, prev, next]
+      properties:
+        first: { type: string }
+        last: { type: string }
+        prev: { type: [string, "null"] }
+        next: { type: [string, "null"] }
+
+    JourneyCollectionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, links, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Journey"
+        links:
+          $ref: "#/components/schemas/PaginatorLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    HealthEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status]
+          properties:
+            status:
+              const: healthy
+
+    ReadyEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status, checks]
+          properties:
+            status:
+              const: ready
+            checks:
+              type: object
+              additionalProperties: false
+              required: [database, redis, storage]
+              properties:
+                database:
+                  const: up
+                redis:
+                  const: up
+                storage:
+                  const: up
+
+    ReadinessProblem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance, correlation_id, checks]
+      properties:
+        type:
+          const: urn:problem:journeys:service-unavailable
+        title:
+          const: Service unavailable
+        status:
+          const: 503
+        detail:
+          type: string
+        instance:
+          type: string
+        correlation_id:
+          type: string
+          format: uuid
+        checks:
+          type: object
+          additionalProperties: false
+          required: [database, redis, storage]
+          properties:
+            database:
+              type: string
+              enum: [up, down]
+            redis:
+              type: string
+              enum: [up, down]
+            storage:
+              type: string
+              enum: [up, down]
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance, correlation_id]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          pattern: "^/"
+        correlation_id:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+  responses:
+    UnauthenticatedProblem:
+      description: Authentication is required.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Bearer authentication challenge emitted by the current error handler.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ForbiddenProblem:
+      description: The authenticated user is not authorized.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFoundProblem:
+      description: Resource not found.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TransitionConflictProblem:
+      description: Journey lifecycle transition is not allowed from the current state.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ItineraryConflictProblem:
+      description: Journey is not a draft or already has an itinerary.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    CsrfProblem:
+      description: Stateful browser CSRF token is missing or invalid.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ValidationProblem:
+      description: Request validation failed.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    RateLimitProblem:
+      description: Contextual rate limit exceeded.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+        Retry-After:
+          description: Seconds until another request should be attempted.
+          schema:
+            type: integer
+            minimum: 0
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServerProblem:
+      description: Safe unexpected-error response.
+      headers:
+        X-Correlation-ID:
+          $ref: "#/components/headers/CorrelationId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
